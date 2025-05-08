@@ -1,43 +1,25 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import { createClient } from "@supabase/supabase-js";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
 
-// Supabase client initialization
+// Dynamic import of the map component (no SSR)
+const MapComponent = dynamic(() => import("./MapComponent"), {
+  ssr: false,
+});
+
+// Supabase setup
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Fix Leaflet marker icons (for better compatibility)
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
-
-function LocationMarker({
-  setLatLng,
-}: {
-  setLatLng: (latlng: { lat: number; lng: number }) => void;
-}) {
-  useMapEvents({
-    click(e) {
-      setLatLng(e.latlng);
-    },
-  });
-  return null;
-}
-
 export default function Page() {
   const searchParams = useSearchParams();
-  const userID = searchParams.get("userID");
+  const userID =
+    searchParams.get("userID") || "00000000-0000-0000-0000-000000000000";
 
   const [latLng, setLatLng] = useState<{ lat: number; lng: number } | null>(
     null
@@ -50,24 +32,19 @@ export default function Page() {
     lng: number;
   } | null>(null);
 
-  // Get the user's current location using the Geolocation API
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
           setCurrentLocation({ lat: latitude, lng: longitude });
-          setLatLng({ lat: latitude, lng: longitude }); // Set the initial map center to current location
+          setLatLng({ lat: latitude, lng: longitude });
         },
-        (error) => {
-          console.error("Error getting current location:", error);
-          // Default to a central location if geolocation fails
+        () => {
           setCurrentLocation({ lat: 20, lng: 78 });
           setLatLng({ lat: 20, lng: 78 });
         }
       );
-    } else {
-      alert("Geolocation is not supported by this browser.");
     }
   }, []);
 
@@ -140,24 +117,13 @@ export default function Page() {
         </ul>
       )}
 
-      {/* Map Container */}
-      <div className="h-64 w-full">
-        <MapContainer
-          center={
-            currentLocation
-              ? [currentLocation.lat, currentLocation.lng]
-              : [20, 78]
-          }
-          zoom={currentLocation ? 12 : 4} // Zoom in if current location is available
-          className="h-full w-full rounded-md"
-        >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          {latLng && <Marker position={[latLng.lat, latLng.lng]} />}
-          <LocationMarker setLatLng={setLatLng} />
-        </MapContainer>
-      </div>
+      {/* Dynamically imported map */}
+      <MapComponent
+        latLng={latLng}
+        setLatLng={setLatLng}
+        currentLocation={currentLocation}
+      />
 
-      {/* Display the latitude and longitude */}
       {latLng && (
         <div className="mt-4 text-sm text-gray-600">
           <p>Latitude: {latLng.lat}</p>
