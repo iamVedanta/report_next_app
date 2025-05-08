@@ -1,103 +1,183 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect } from "react";
+import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { createClient } from "@supabase/supabase-js";
+import { useSearchParams } from "next/navigation";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+
+// Supabase client initialization
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// Fix Leaflet marker icons (for better compatibility)
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+function LocationMarker({
+  setLatLng,
+}: {
+  setLatLng: (latlng: { lat: number; lng: number }) => void;
+}) {
+  useMapEvents({
+    click(e) {
+      setLatLng(e.latlng);
+    },
+  });
+  return null;
+}
+
+export default function Page() {
+  const searchParams = useSearchParams();
+  const userID = searchParams.get("userID");
+
+  const [latLng, setLatLng] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
+  const [description, setDescription] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [currentLocation, setCurrentLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+
+  // Get the user's current location using the Geolocation API
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setCurrentLocation({ lat: latitude, lng: longitude });
+          setLatLng({ lat: latitude, lng: longitude }); // Set the initial map center to current location
+        },
+        (error) => {
+          console.error("Error getting current location:", error);
+          // Default to a central location if geolocation fails
+          setCurrentLocation({ lat: 20, lng: 78 });
+          setLatLng({ lat: 20, lng: 78 });
+        }
+      );
+    } else {
+      alert("Geolocation is not supported by this browser.");
+    }
+  }, []);
+
+  const handleSearch = async () => {
+    if (!searchQuery) return;
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${searchQuery}`
+    );
+    const data = await res.json();
+    setSearchResults(data);
+  };
+
+  const handleSelectPlace = (place: any) => {
+    setLatLng({ lat: parseFloat(place.lat), lng: parseFloat(place.lon) });
+    setSearchResults([]);
+  };
+
+  const handleSubmit = async () => {
+    if (!latLng || !description || !userID) {
+      alert("Please fill in all fields");
+      return;
+    }
+
+    const { error } = await supabase.from("CrimeDB").insert([
+      {
+        user_id: userID,
+        latt: latLng.lat,
+        long: latLng.lng,
+        description,
+      },
+    ]);
+
+    if (error) {
+      alert("Error submitting data");
+      console.error(error);
+    } else {
+      alert("Data submitted successfully");
+    }
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="p-4 max-w-xl mx-auto font-sans flex flex-col space-y-4">
+      <h2 className="text-xl font-semibold text-center">Submit Report</h2>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      <input
+        type="text"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder="Search for a place"
+        className="w-full border border-gray-300 rounded-md p-2"
+      />
+      <button
+        onClick={handleSearch}
+        className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+      >
+        Search
+      </button>
+
+      {searchResults.length > 0 && (
+        <ul className="border rounded-md max-h-40 overflow-y-auto">
+          {searchResults.map((place, idx) => (
+            <li
+              key={idx}
+              onClick={() => handleSelectPlace(place)}
+              className="p-2 hover:bg-gray-100 cursor-pointer text-sm"
+            >
+              {place.display_name}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Map Container */}
+      <div className="h-64 w-full">
+        <MapContainer
+          center={
+            currentLocation
+              ? [currentLocation.lat, currentLocation.lng]
+              : [20, 78]
+          }
+          zoom={currentLocation ? 12 : 4} // Zoom in if current location is available
+          className="h-full w-full rounded-md"
+        >
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          {latLng && <Marker position={[latLng.lat, latLng.lng]} />}
+          <LocationMarker setLatLng={setLatLng} />
+        </MapContainer>
+      </div>
+
+      {/* Display the latitude and longitude */}
+      {latLng && (
+        <div className="mt-4 text-sm text-gray-600">
+          <p>Latitude: {latLng.lat}</p>
+          <p>Longitude: {latLng.lng}</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      )}
+
+      <textarea
+        placeholder="Enter description..."
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        className="w-full border border-gray-300 rounded-md p-2 h-24"
+      />
+
+      <button
+        onClick={handleSubmit}
+        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+      >
+        Submit
+      </button>
     </div>
   );
 }
